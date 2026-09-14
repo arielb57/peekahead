@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.7"
+      # ruff is pinned here and in pyproject.toml so a linter release cannot break the build.
+      - run: pip install ruff==0.6.9
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12", "3.13"]
+        pandas: [true, false]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install (core only)
+        if: ${{ !matrix.pandas }}
+        run: pip install -e . pytest
+      - name: Install (with pandas)
+        if: ${{ matrix.pandas }}
+        run: pip install -e ".[pandas]" pytest
+      - run: pytest -q
+      - run: peekahead peekahead.corpus:ewm_span_10 --rows 200
+      - run: python benchmarks/detection_matrix.py --quick
