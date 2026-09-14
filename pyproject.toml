@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "peekahead"
+version = "0.1.0"
+description = "Black-box look-ahead bias detector for backtest features: names the leaking column and how far ahead"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Ariel Belhamou" }]
+requires-python = ">=3.9"
+dependencies = []
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
+[project.optional-dependencies]
+pandas = ["pandas>=1.5"]
+dev = ["pytest>=7", "ruff==0.6.9"]
+
+[project.scripts]
+peekahead = "peekahead.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+# Line length is the formatter's job; it leaves long string literals alone.
+ignore = ["B023", "E501"]
