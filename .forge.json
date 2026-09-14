@@ -1,0 +1,28 @@
+{
+  "name": "peekahead",
+  "tagline": "Black-box look-ahead bias detector for backtest features: names the leaking column and how far ahead",
+  "language": "python",
+  "topics": [
+    "backtesting",
+    "lookahead-bias",
+    "quant-finance",
+    "differential-testing",
+    "pandas",
+    "data-leakage"
+  ],
+  "trendOrigin": "Trend 4 (compiler-accurate Find Usages): the point was that grep-grade answers look right and aren't. Look-ahead linters grep for shift(-1). This project proves the leak by running the code instead of pattern-matching it.",
+  "gate": {
+    "stats": {
+      "sourceFiles": 13,
+      "testFiles": 6,
+      "testCases": 52,
+      "assertions": 135,
+      "readmeWords": 2597,
+      "testsPassed": true,
+      "lintPassed": true,
+      "entryPointRuns": true
+    },
+    "warnings": []
+  },
+  "generatedAt": "2026-09-14T17:43:30.121Z"
+}
