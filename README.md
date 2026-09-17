@@ -1,6 +1,6 @@
 # peekahead
 
-Black-box look-ahead bias detector for backtest features: it names the leaking column and how many rows ahead the feature reads.
+Black-box look-ahead bias detector for backtest features: it names the leaking column, how many rows ahead the feature reads, and how much of your backtest's performance was the leak.
 
 ## The problem
 
@@ -67,6 +67,38 @@ and a test checks it empirically over 300 runs.
 Outputs are compared with NaN equal to NaN (None and NaT count as missing too).
 Floats are compared within `rtol=1e-9, atol=1e-12`. Tuples and lists are
 compared element by element.
+
+### What the leak is worth
+
+"This feature reads two rows ahead" is a bug report. "Removing the leak takes the Sharpe from 1.8 to 0.1" is a decision. A leak that nobody prices tends not to get fixed, so `measure` answers the second question.
+
+There is only one honest way to do it, and it is the same black-box stance as the detector: **recompute the feature causally.** For every row `t`, call the feature on the table truncated at `t` and keep the value it produces for `t`. That is by construction what the feature would have produced in real time, whatever it does internally. Then trade both versions with the same rule and compare.
+
+The rule has to be causal too, or it introduces a second leak and muddies the comparison. The default is long above the expanding median of the signal so far, short below: no scale assumption, so it works on a feature that is a price level as readily as one that is a z-score, and it reads nothing it could not have read at the time.
+
+```
+$ peekahead features.py:next_return --rows 120 --cost
+...
+119 of 120 rows differ once the feature is recomputed causally (99.2%)
+Sharpe   as reported +22.54   causal +0.00   the leak was worth +22.54
+return   as reported +158.6%   causal +0.0%
+first divergence at row 0
+```
+
+Three features on the same table (`ohlcv(150, seed=3)`), to show the range:
+
+| feature | rows differing | Sharpe as reported | Sharpe causal | the leak was worth |
+|---|---:|---:|---:|---:|
+| `close.shift(-1)` return | 99.3% | +18.95 | +0.00 | **+18.95** |
+| `rolling(7, center=True).mean()` | 99.3% | +0.91 | −1.11 | **+2.01** |
+| whole-sample z-score | 99.3% | −1.07 | −1.17 | **+0.10** |
+| `rolling(5).mean()` | 0.0% | — | — | nothing to attribute |
+
+Reproduce with `python benchmarks/cost_table.py`.
+
+The third row is the one worth reading twice. A whole-sample z-score is a genuine leak — every row of it changes under causal recomputation — and it is worth almost nothing here, because a monotone rescaling barely moves a rule that only compares against a median. The centred mean is the opposite: a smaller-looking leak that turns a losing strategy into a winning-looking one. Detection and cost are different questions, and a tool that only answers the first invites both panic and complacency.
+
+This costs one feature call per row, so it is quadratic in rows. It is a diagnostic for a few hundred rows, not a backtest engine.
 
 ## Install and usage
 
@@ -291,6 +323,19 @@ no false positives on features that are simply strict about their input.
   window you expect. A leak that no single-row perturbation reproduces (one
   that needs several future rows to change together) gets
   `horizon=None` for that column.
+- **The cost depends on the rule that trades the feature.** The default
+  expanding-median rule is causal and scale-free, but it is one rule, and
+  "worth +2.01 Sharpe" means worth that much *to it*. A leak that is
+  worthless to a median-crossing rule can be worth a great deal to one that
+  trades the size of the signal. Pass your own `rule` when it matters, and
+  read the divergence rate — which depends on nothing but the feature — as
+  the scale-free number.
+- **Causal recomputation reruns the feature per row.** That is quadratic, and
+  it assumes the feature is a pure function of the table it is handed. One
+  that caches, reads a global, or hits the network will report nonsense.
+- **A feature must reduce to one number per row to be priced.** `measure`
+  takes a single float per row; a feature returning several columns is
+  detected as leaking but not priced.
 - **Positional outputs must drop rows at the end, not the start.** A plain
   list shorter than the input is aligned from row 0. A function that drops
   warm-up rows must return `{row: value}`, or go through the pandas adapter,

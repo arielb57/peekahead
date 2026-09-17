@@ -16,6 +16,7 @@ from typing import Any, Callable, List, Optional
 
 from . import __version__
 from .core import check
+from .cost import DEFAULT_PERIODS, measure
 from .synthetic import ohlcv
 
 
@@ -60,6 +61,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--random-cuts", type=int, default=8, help="random cut points on top of bisection")
     parser.add_argument("--window", type=int, default=16, help="source rows probed one at a time for the horizon")
+    parser.add_argument(
+        "--cost",
+        action="store_true",
+        help="also recompute the feature causally and report what the leak was worth in Sharpe",
+    )
+    parser.add_argument(
+        "--periods", type=int, default=DEFAULT_PERIODS, help="bars per year for annualising (default 252)"
+    )
     parser.add_argument("--json", action="store_true", help="print the report as JSON")
     parser.add_argument("--version", action="version", version=f"peekahead {__version__}")
     return parser
@@ -92,11 +101,32 @@ def main(argv: Optional[List[str]] = None) -> int:
             f"peekahead: {args.function} failed on the unmodified table: {type(exc).__name__}: {exc}", file=sys.stderr
         )
         return 2
+    cost = None
+    if args.cost:
+        try:
+            cost = measure(fn, table, periods=args.periods)
+        except Exception as exc:  # noqa: BLE001 - the detector's verdict still stands without this
+            print(f"peekahead: could not measure the cost: {type(exc).__name__}: {exc}", file=sys.stderr)
+
     if args.json:
-        print(json.dumps(report.to_dict(), indent=2, default=str))
+        payload = report.to_dict()
+        if cost is not None:
+            payload["cost"] = {
+                "diverging_rows": len(cost.diverging_rows),
+                "compared_rows": cost.compared_rows,
+                "sharpe_reported": cost.reported.sharpe(cost.periods),
+                "sharpe_causal": cost.causal.sharpe(cost.periods),
+                "sharpe_gap": cost.sharpe_gap,
+                "return_reported": cost.reported.total_return,
+                "return_causal": cost.causal.total_return,
+            }
+        print(json.dumps(payload, indent=2, default=str))
     else:
         print(f"{args.function} on {args.rows} synthetic OHLCV rows (seed {args.seed})")
         print(report.summary())
+        if cost is not None:
+            print()
+            print(cost.summary())
     return 1 if report.leaked else 0
 
 
